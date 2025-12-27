@@ -9,12 +9,10 @@ import Data.List (intercalate, partition)
 import qualified Cabal.Index                            as I
 import qualified Cabal.Plan                             as P
 import qualified Data.Map.Strict                        as M
-import qualified Data.Set                               as S
 import qualified Data.Text                              as T
 import qualified Distribution.Types.PackageName         as C
 import qualified Distribution.Types.UnqualComponentName as C
 import qualified Distribution.Types.Version             as C
-import qualified Topograph                              as TG
 
 import CabalBundler.ExeOption
 
@@ -36,8 +34,17 @@ generateOpenBSD tracer packageName exeName' plan meta = do
 
     case findExe packageName exeName units of
         [(uid0, pkgId0)] -> do
-            usedUnits <- bfs tracer units uid0
-            deps <- unitsToDeps meta usedUnits
+            -- Collect all global units from the plan (not just those reachable from executable)
+            -- This ensures test dependencies like tasty are included
+            let allGlobalUnits =
+                    [ unit
+                    | unit <- M.elems units
+                    , P.uType unit == P.UnitTypeGlobal
+                    , case P.uPkgSrc unit of
+                        Just (P.RepoTarballPackage _) -> True
+                        _                             -> False
+                    ]
+            deps <- unitsToDeps meta allGlobalUnits
             case partition ((pkgId0 == ) . depPkgId) deps of
                 (mainPackage : _, depUnits) -> do
                     return $ unlines $ makefileLines mainPackage depUnits
@@ -88,45 +95,6 @@ data MetadataException
   deriving Show
 
 instance Exception MetadataException
-
-bfs :: TracerPeu r w -> Map P.UnitId P.Unit -> P.UnitId -> Peu r [P.Unit]
-bfs tracer units unit0 = fmap concat $ do
-    uids <- either (throwM . PackageLoop) id $ TG.runG am $ \g -> do
-        v <- maybe (throwM $ MissingUnit unit0) return $
-            TG.gToVertex g unit0
-
-        return $ map (TG.gFromVertex g) $
-            -- nub and sort
-            reverse $ S.toList $ S.fromList $ concat $ TG.dfs g v
-
-    for uids $ \uid -> do
-        unit <- lookupUnit units uid
-        exes <- case M.toList (P.uComps unit) of
-            [(_, compinfo)] ->
-                collectExeDeps units (P.ciExeDeps compinfo)
-            _ -> do
-                putDebug tracer $ "Unit with multiple components " ++ show uid
-                pure []
-        pure $ [unit] <> exes
-
-  where
-    am :: M.Map P.UnitId (S.Set P.UnitId)
-    am = fmap (foldMap P.ciLibDeps . P.uComps) units
-
-data PlanConstructionException
-    = PackageLoop [P.UnitId]
-    | MissingUnit P.UnitId
-  deriving Show
-
-instance Exception PlanConstructionException
-
-collectExeDeps :: M.Map P.UnitId P.Unit -> S.Set P.UnitId -> Peu r [P.Unit]
-collectExeDeps units = traverse check . S.toList where
-    check uid = lookupUnit units uid
-
-lookupUnit :: M.Map P.UnitId P.Unit -> P.UnitId -> Peu r P.Unit
-lookupUnit units uid =
-    maybe (throwM $ MissingUnit uid) return $ M.lookup uid units
 
 makefileLines :: Dep -> [Dep] -> [String]
 makefileLines mainPackage deps =
