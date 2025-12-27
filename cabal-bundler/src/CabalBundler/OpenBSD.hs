@@ -13,6 +13,7 @@ import qualified Data.Text                              as T
 import qualified Distribution.Types.PackageName         as C
 import qualified Distribution.Types.UnqualComponentName as C
 import qualified Distribution.Types.Version             as C
+import qualified Distribution.Version                   as C
 
 import CabalBundler.ExeOption
 
@@ -45,12 +46,14 @@ generateOpenBSD tracer packageName exeName' plan meta = do
                         _                             -> False
                     ]
             deps <- unitsToDeps meta allGlobalUnits
-            case partition ((pkgId0 == ) . depPkgId) deps of
+            -- Apply version overrides for known problematic packages
+            fixedDeps <- applyVersionOverrides meta deps
+            case partition ((pkgId0 == ) . depPkgId) fixedDeps of
                 (mainPackage : _, depUnits) -> do
                     return $ unlines $ makefileLines mainPackage depUnits
                 ([], _) -> do
                     die tracer $ "Expected to find main package " <>
-                        show (pkgId0, depPkgId <$> deps)
+                        show (pkgId0, depPkgId <$> fixedDeps)
         uids ->
               throwM $ UnknownExecutable exeName (fst <$> uids)
 
@@ -95,6 +98,53 @@ data MetadataException
   deriving Show
 
 instance Exception MetadataException
+
+-------------------------------------------------------------------------------
+-- Version overrides for problematic packages
+-------------------------------------------------------------------------------
+
+-- | Map of (package name, bad version) to good version
+--
+-- Add problematic package versions here to automatically substitute them.
+-- When a package version is known to be broken on OpenBSD, add an entry here
+-- to replace it with a known good version.
+--
+-- Example: If splitmix-0.1.3.1 is broken, it will be replaced with 0.1.2:
+--
+-- > [ (mkPackageName "splitmix", C.mkVersion [0,1,3,1]) =: C.mkVersion [0,1,2]
+-- > , (mkPackageName "another-pkg", C.mkVersion [1,2,3]) =: C.mkVersion [1,2,2]
+-- > ]
+versionOverrides :: Map (PackageName, Version) Version
+versionOverrides = M.fromList
+    [ (mkPackageName "splitmix", C.mkVersion [0,1,3,1]) =: C.mkVersion [0,1,2]
+    ]
+  where
+    (=:) = (,)
+
+applyVersionOverrides :: Map PackageName I.PackageInfo -> [Dep] -> Peu r [Dep]
+applyVersionOverrides meta = traverse applyOverride
+  where
+    applyOverride dep =
+        case M.lookup (depPackageName dep, depVersion dep) versionOverrides of
+            Just newVersion -> do
+                -- Look up the revision for the new version
+                pkgInfo <- maybe (throwM $ UnknownPackageName (depPackageName dep)) return $
+                    M.lookup (depPackageName dep) meta
+                relInfo <- maybe (throwM $ UnknownPackageVersion (depPackageName dep) newVersion) return $
+                    M.lookup newVersion (I.piVersions pkgInfo)
+
+                let newPkgId = P.PkgId (fromCabal (depPackageName dep)) (fromCabal newVersion)
+
+                return dep
+                    { depVersion = newVersion
+                    , depRevision = fromIntegral (I.riRevision relInfo)
+                    , depPkgId = newPkgId
+                    }
+            Nothing -> return dep
+
+-------------------------------------------------------------------------------
+-- Output formatting
+-------------------------------------------------------------------------------
 
 makefileLines :: Dep -> [Dep] -> [String]
 makefileLines mainPackage deps =
