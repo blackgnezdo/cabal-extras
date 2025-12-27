@@ -13,7 +13,6 @@ import qualified Data.Text                              as T
 import qualified Distribution.Types.PackageName         as C
 import qualified Distribution.Types.UnqualComponentName as C
 import qualified Distribution.Types.Version             as C
-import qualified Distribution.Version                   as C
 
 import CabalBundler.ExeOption
 
