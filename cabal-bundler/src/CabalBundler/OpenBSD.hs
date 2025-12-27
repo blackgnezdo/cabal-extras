@@ -33,7 +33,7 @@ generateOpenBSD tracer packageName exeName' plan meta = do
         units = P.pjUnits plan
 
     case findExe packageName exeName units of
-        [(uid0, pkgId0)] -> do
+        [(_, pkgId0)] -> do
             -- Collect all global units from the plan (not just those reachable from executable)
             -- This ensures test dependencies like tasty are included
             let allGlobalUnits =
