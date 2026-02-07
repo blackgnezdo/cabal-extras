@@ -82,7 +82,7 @@ library cabal-haddock-server-internal
     , http-types             ^>=0.12.3
     , lucid                  ^>=2.11.1
     , optparse-applicative   ^>=0.18.0.0
-    , tar                    ^>=0.6.2.0
+    , tar                    ^>=0.7.0.0
     , time-manager           ^>=0.1.0
     , wai                    ^>=3.2.3
     , warp                   ^>=3.4.0

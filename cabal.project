@@ -75,3 +75,4 @@ allow-newer: gentle-introduction:filepath
 
 allow-newer: serialise-0.2.6.0:strict
 allow-newer: serialise-0.2.6.0:these
+allow-newer: cabal-install-parsers:tar
