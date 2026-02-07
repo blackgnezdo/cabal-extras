@@ -1,5 +1,5 @@
-with-compiler: ghc-9.8.4
-index-state: 2024-07-03T13:49:27Z
+with-compiler: ghc
+index-state: 2026-01-01T00:00:00Z
 tests: True
 
 packages: cabal-bundler
@@ -56,10 +56,22 @@ constraints: ghc-lib-parser-ex -no-ghc-lib -auto
 -- Never depend on cryptonite. Aptly named package.
 constraints: cryptonite <0
 
+-- OpenBSD compatibility: splitmix 0.1.3+ uses sys/random.h which OpenBSD lacks
+constraints: splitmix ==0.1.2
+
 -- Warp without x509
 constraints: warp -x509
 
 allow-newer: hooglite:Cabal
+allow-newer: hooglite:base
+allow-newer: hooglite:containers
+allow-newer: hooglite:filepath
+allow-newer: hooglite:ghc-lib-parser
+allow-newer: hooglite:ghc-lib-parser-ex
+
+allow-newer: gentle-introduction:base
+allow-newer: gentle-introduction:containers
+allow-newer: gentle-introduction:filepath
 
 allow-newer: serialise-0.2.6.0:strict
 allow-newer: serialise-0.2.6.0:these
