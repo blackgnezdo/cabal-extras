@@ -49,10 +49,9 @@ generateOpenBSD tracer packageName exeName' plan meta = do
             fixedDeps <- applyVersionOverrides meta deps
             case partition ((pkgId0 == ) . depPkgId) fixedDeps of
                 (mainPackage : _, depUnits) -> do
-                    return $ unlines $ makefileLines mainPackage depUnits
-                ([], _) -> do
-                    die tracer $ "Expected to find main package " <>
-                        show (pkgId0, depPkgId <$> fixedDeps)
+                    return $ unlines $ makefileLines (Just mainPackage) depUnits
+                ([], depUnits) -> do
+                    return $ unlines $ makefileLines Nothing depUnits
         uids ->
               throwM $ UnknownExecutable exeName (fst <$> uids)
 
@@ -145,18 +144,22 @@ applyVersionOverrides meta = traverse applyOverride
 -- Output formatting
 -------------------------------------------------------------------------------
 
-makefileLines :: Dep -> [Dep] -> [String]
+makefileLines :: Maybe Dep -> [Dep] -> [String]
 makefileLines mainPackage deps =
-    let cleanedDeps = ordNubOn depPackageName $ sortOn depPackageName deps
-    in  [ "MODCABAL_STEM\t\t= " <> prettyShow (depPackageName mainPackage)
-        , "MODCABAL_VERSION\t= " <>  prettyShow (depVersion mainPackage)
-        ] <>
-        [ "MODCABAL_REVISION\t= " <> show rev
-        | let rev = depRevision mainPackage
-        , rev > 0]
-        <>
-        [ "MODCABAL_MANIFEST\t= \\" | not $ null cleanedDeps ] <>
-        map manifestLine cleanedDeps
+    let manifest =
+          let cleanedDeps = ordNubOn depPackageName $ sortOn depPackageName deps in
+            [ "MODCABAL_MANIFEST\t= \\" | not $ null cleanedDeps ] <>
+            map manifestLine cleanedDeps
+    in
+      case mainPackage of
+        Just mainPkg ->
+          [ "MODCABAL_STEM\t\t= " <> prettyShow (depPackageName mainPkg)
+          , "MODCABAL_VERSION\t= " <>  prettyShow (depVersion mainPkg)
+          ] <>
+          [ "MODCABAL_REVISION\t= " <> show rev
+          | let rev = depRevision mainPkg , rev > 0]
+        Nothing -> []
+      <> manifest
 
 manifestLine :: Dep -> String
 manifestLine dep =
